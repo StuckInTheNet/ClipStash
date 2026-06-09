@@ -14,12 +14,12 @@ interface SearchBarProps {
 }
 
 const CONTENT_TYPES = [
-  { value: "", label: "All", icon: "⊡" },
   { value: "text", label: "Text", icon: "T" },
   { value: "link", label: "Links", icon: "↗" },
   { value: "code", label: "Code", icon: "⟨⟩" },
   { value: "color", label: "Colors", icon: "◉" },
   { value: "image", label: "Images", icon: "▣" },
+  { value: "", label: "All", icon: "⊡" },
 ];
 
 export default function SearchBar({

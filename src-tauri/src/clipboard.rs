@@ -96,141 +96,233 @@ fn get_frontmost_app() -> Option<String> {
     None
 }
 
-/// Check what type of content is on the clipboard (macOS)
+/// Single JXA call: check change count, detect type, and save image if needed.
+/// Returns: "SAME" | "TEXT" | "IMAGE:/path/to/saved.png" | "EMPTY"
 #[cfg(target_os = "macos")]
-fn clipboard_content_type() -> Option<&'static str> {
+fn poll_clipboard(last_count: i64, save_dir: &str) -> Option<(i64, String)> {
     use std::process::Command;
-    // Check clipboard types using AppleScript
-    let output = Command::new("osascript")
-        .arg("-e")
-        .arg("clipboard info")
-        .output()
-        .ok()?;
-    if output.status.success() {
-        let info = String::from_utf8_lossy(&output.stdout);
-        let has_image = info.contains("TIFF") || info.contains("PNGf") || info.contains("tiff") || info.contains("png");
-        let has_text = info.contains("«class utf8»") || info.contains("«class ut16»") || info.contains("string");
-
-        // Prioritize image — screenshots may include text metadata
-        if has_image {
-            return Some("image");
-        }
-        if has_text {
-            return Some("text");
-        }
-    }
-    None
-}
-
-#[cfg(target_os = "windows")]
-fn clipboard_content_type() -> Option<&'static str> {
-    // Windows: default to text for now, image support requires win32 API
-    Some("text")
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-fn clipboard_content_type() -> Option<&'static str> {
-    Some("text")
-}
-
-/// Save clipboard image to disk (macOS)
-#[cfg(target_os = "macos")]
-fn save_clipboard_image() -> Option<(PathBuf, u64)> {
-    use std::process::Command;
-
-    let dir = images_dir()?;
-    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S_%3f");
-    let filename = format!("clip_{}.png", timestamp);
-    let filepath = dir.join(&filename);
-
-    // Use osascript to save clipboard image as PNG via a temp TIFF
-    // pngpaste is more reliable if available, but osascript works as fallback
     let script = format!(
-        r#"
-        use framework "AppKit"
-        set pb to current application's NSPasteboard's generalPasteboard()
-        set imgData to pb's dataForType:(current application's NSPasteboardTypeTIFF)
-        if imgData is missing value then return "no_image"
-        set bitmapRep to current application's NSBitmapImageRep's imageRepWithData:imgData
-        set pngData to bitmapRep's representationUsingType:(current application's NSBitmapImageFileTypePNG) properties:(missing value)
-        pngData's writeToFile:"{}" atomically:true
-        return "ok"
-        "#,
-        filepath.display()
+        r#"ObjC.import('AppKit');
+var pb = $.NSPasteboard.generalPasteboard;
+var cc = pb.changeCount;
+if (cc == {}) {{ "SAME"; }} else {{
+  var types = pb.types.js.map(function(t) {{ return t.js; }});
+  var hasImage = types.some(function(t) {{ return t.indexOf('tiff') >= 0 || t.indexOf('png') >= 0; }});
+  var hasText = types.some(function(t) {{ return t.indexOf('string') >= 0 || t.indexOf('utf8') >= 0; }});
+  if (hasImage) {{
+    var imgData = pb.dataForType($.NSPasteboardTypeTIFF);
+    if (!imgData.isNil()) {{
+      var rep = $.NSBitmapImageRep.imageRepWithData(imgData);
+      var png = rep.representationUsingTypeProperties($.NSBitmapImageFileTypePNG, $());
+      var ts = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 17);
+      var path = '{}/' + 'clip_' + ts + '.png';
+      png.writeToFileAtomically(path, true);
+      cc + '|IMAGE:' + path;
+    }} else {{ cc + '|EMPTY'; }}
+  }} else if (hasText) {{
+    cc + '|TEXT';
+  }} else {{
+    cc + '|EMPTY';
+  }}
+}}"#,
+        last_count, save_dir
     );
 
     let output = Command::new("osascript")
-        .arg("-l")
-        .arg("AppleScript")
-        .arg("-e")
-        .arg(&script)
+        .arg("-l").arg("JavaScript")
+        .arg("-e").arg(&script)
         .output()
         .ok()?;
 
     if output.status.success() {
         let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if result == "ok" {
-            let metadata = std::fs::metadata(&filepath).ok()?;
-            return Some((filepath, metadata.len()));
+        if result == "SAME" {
+            return Some((last_count, "SAME".to_string()));
+        }
+        // Parse "count|TYPE" or "count|IMAGE:/path"
+        if let Some(idx) = result.find('|') {
+            let count_str = &result[..idx];
+            let payload = &result[idx + 1..];
+            if let Ok(count) = count_str.parse::<i64>() {
+                return Some((count, payload.to_string()));
+            }
         }
     }
     None
 }
 
 #[cfg(target_os = "windows")]
-fn save_clipboard_image() -> Option<(PathBuf, u64)> {
-    None
+fn poll_clipboard(_last_count: i64, _save_dir: &str) -> Option<(i64, String)> {
+    // Windows fallback: always report TEXT
+    Some((0, "TEXT".to_string()))
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-fn save_clipboard_image() -> Option<(PathBuf, u64)> {
+fn poll_clipboard(_last_count: i64, _save_dir: &str) -> Option<(i64, String)> {
     None
 }
 
-/// Starts the clipboard monitoring loop
-pub fn start_monitor(db: Arc<Database>) {
-    std::thread::spawn(move || {
-        let mut last_hash = String::new();
-
-        loop {
-            std::thread::sleep(Duration::from_millis(500));
-
-            let content_kind = match clipboard_content_type() {
-                Some(k) => k,
-                None => continue,
+/// Get the macOS screenshot save directory
+#[cfg(target_os = "macos")]
+fn get_screenshot_dir() -> PathBuf {
+    use std::process::Command;
+    let output = Command::new("defaults")
+        .args(["read", "com.apple.screencapture", "location"])
+        .output()
+        .ok();
+    if let Some(out) = output {
+        if out.status.success() {
+            let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let expanded = if path.starts_with('~') {
+                dirs::home_dir()
+                    .map(|h| h.join(&path[2..]))
+                    .unwrap_or_else(|| PathBuf::from(&path))
+            } else {
+                PathBuf::from(&path)
             };
+            if expanded.exists() {
+                return expanded;
+            }
+        }
+    }
+    // Default: ~/Desktop
+    dirs::desktop_dir().unwrap_or_else(|| dirs::home_dir().unwrap().join("Desktop"))
+}
 
-            if content_kind == "image" {
-                // Handle image clipboard (screenshots, copied images)
-                if let Some((filepath, file_size)) = save_clipboard_image() {
-                    // Read file bytes for hashing
-                    let bytes = match std::fs::read(&filepath) {
+/// Starts a thread that watches for new screenshot files on disk
+fn start_screenshot_watcher(db: Arc<Database>) {
+    std::thread::spawn(move || {
+        #[cfg(target_os = "macos")]
+        {
+            let screenshot_dir = get_screenshot_dir();
+            let mut known_files: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+
+            // Seed with existing screenshots so we don't import old ones
+            if let Ok(entries) = std::fs::read_dir(&screenshot_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.file_name()
+                        .and_then(|n| n.to_str())
+                        .map(|n| n.starts_with("Screenshot") && n.ends_with(".png"))
+                        .unwrap_or(false)
+                    {
+                        known_files.insert(path);
+                    }
+                }
+            }
+
+            loop {
+                std::thread::sleep(Duration::from_millis(1500));
+
+                let entries = match std::fs::read_dir(&screenshot_dir) {
+                    Ok(e) => e,
+                    Err(_) => continue,
+                };
+
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    let filename = match path.file_name().and_then(|n| n.to_str()) {
+                        Some(n) => n.to_string(),
+                        None => continue,
+                    };
+
+                    // Only process screenshot files
+                    if !filename.starts_with("Screenshot") || !filename.ends_with(".png") {
+                        continue;
+                    }
+
+                    if known_files.contains(&path) {
+                        continue;
+                    }
+
+                    // Wait a moment for the file to finish writing
+                    std::thread::sleep(Duration::from_millis(500));
+
+                    let bytes = match std::fs::read(&path) {
                         Ok(b) => b,
                         Err(_) => continue,
                     };
+
                     let hash = hash_content(&bytes);
-                    if hash == last_hash {
-                        // Duplicate image, remove the file we just saved
-                        let _ = std::fs::remove_file(&filepath);
+                    let file_size = bytes.len() as i64;
+
+                    // Copy to our images directory
+                    let dest_dir = match images_dir() {
+                        Some(d) => d,
+                        None => continue,
+                    };
+                    let dest = dest_dir.join(&filename);
+                    if std::fs::copy(&path, &dest).is_err() {
                         continue;
                     }
-                    last_hash = hash.clone();
 
-                    let source_app = get_frontmost_app();
-                    let path_str = filepath.to_string_lossy().to_string();
+                    let dest_str = dest.to_string_lossy().to_string();
 
                     let _ = db.insert_clip(
                         "image",
                         None,
-                        Some(&path_str),
-                        source_app.as_deref(),
+                        Some(&dest_str),
+                        Some("Screenshot"),
                         &hash,
-                        "Screenshot",
-                        file_size as i64,
+                        &filename,
+                        file_size,
                         false,
                     );
+
+                    known_files.insert(path);
                 }
-            } else {
+            }
+        }
+    });
+}
+
+/// Starts the clipboard monitoring loop
+pub fn start_monitor(db: Arc<Database>) {
+    // Start the screenshot file watcher
+    start_screenshot_watcher(Arc::clone(&db));
+
+    std::thread::spawn(move || {
+        let mut last_count: i64 = 0;
+        let mut last_text_hash = String::new();
+        let save_dir = images_dir()
+            .map(|d| d.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        loop {
+            std::thread::sleep(Duration::from_millis(800));
+
+            let (new_count, payload) = match poll_clipboard(last_count, &save_dir) {
+                Some(r) => r,
+                None => continue,
+            };
+            last_count = new_count;
+
+            if payload == "SAME" || payload == "EMPTY" {
+                continue;
+            }
+
+            if let Some(path) = payload.strip_prefix("IMAGE:") {
+                // Image was saved by JXA
+                let filepath = PathBuf::from(path);
+                let file_size = std::fs::metadata(&filepath).map(|m| m.len()).unwrap_or(0);
+                let bytes = match std::fs::read(&filepath) {
+                    Ok(b) => b,
+                    Err(_) => continue,
+                };
+                let hash = hash_content(&bytes);
+                let source_app = get_frontmost_app();
+
+                let _ = db.insert_clip(
+                    "image",
+                    None,
+                    Some(path),
+                    source_app.as_deref(),
+                    &hash,
+                    "Screenshot",
+                    file_size as i64,
+                    false,
+                );
+            } else if payload == "TEXT" {
                 // Handle text clipboard
                 if let Some(text) = read_clipboard_text() {
                     if text.is_empty() {
@@ -238,10 +330,10 @@ pub fn start_monitor(db: Arc<Database>) {
                     }
 
                     let hash = hash_content(text.as_bytes());
-                    if hash == last_hash {
+                    if hash == last_text_hash {
                         continue;
                     }
-                    last_hash = hash.clone();
+                    last_text_hash = hash.clone();
 
                     let content_type = detect_content_type(&text);
                     let preview = make_preview(&text, 100);

@@ -40,7 +40,7 @@ export function useClips() {
   const [sourceApps, setSourceApps] = useState<string[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [search, setSearch] = useState("");
-  const [contentType, setContentType] = useState<string>("");
+  const [contentType, setContentType] = useState<string>("text");
   const [sourceApp, setSourceApp] = useState<string>("");
   const [folderId, setFolderId] = useState<number | null>(null);
   const [favoritesOnly, setFavoritesOnly] = useState(false);

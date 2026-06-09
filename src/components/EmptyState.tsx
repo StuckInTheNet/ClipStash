@@ -8,7 +8,7 @@ export default function EmptyState() {
       </div>
       <h3 className="text-base font-medium text-text-primary mb-2">No clips yet</h3>
       <p className="text-[14px] text-text-secondary text-center leading-relaxed max-w-[260px]">
-        Copy anything — text, code, links, colors — and it will appear here automatically.
+        Start copying text, code, links, or colors and they will appear here automatically.
       </p>
       <div className="mt-6 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-surface-raised border border-border-subtle">
         <kbd className="text-[12px] text-accent bg-accent-dim px-2 py-1 rounded-md font-mono font-medium">⌘⇧V</kbd>

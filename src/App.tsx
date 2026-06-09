@@ -114,7 +114,7 @@ function App() {
             {clips.length === 0 ? (
               <EmptyState />
             ) : (
-              <div className="space-y-2 max-w-2xl">
+              <div className="grid grid-cols-3 gap-2">
                 {clips.map((clip) => (
                   <ClipCard
                     key={clip.id}

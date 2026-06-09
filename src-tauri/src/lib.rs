@@ -148,6 +148,7 @@ pub fn run() {
             delete_folder,
         ])
         .setup(|app| {
+            // Register global shortcut
             use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
             let shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyV);
             let app_handle = app.handle().clone();
