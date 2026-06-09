@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicehash/tauri/v2/packages/tauri-utils/schema.json",
+  "productName": "ClipStash",
+  "version": "0.1.0",
+  "identifier": "com.clipstash.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "ClipStash",
+        "width": 1100,
+        "height": 780,
+        "resizable": true,
+        "decorations": true,
+        "center": true,
+        "minWidth": 700,
+        "minHeight": 500
+      }
+    ],
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true
+    },
+    "security": {
+      "csp": null
+    }
+  }
+}
