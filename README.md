@@ -40,9 +40,16 @@ No cloud. No account. Everything stays on your machine.
 
 ## Installation
 
-### Pre-built binaries
+### Download
 
-Coming soon — check [Releases](../../releases) for the latest builds.
+Grab the latest build from [Releases](../../releases):
+
+| Platform | Download |
+|----------|----------|
+| **macOS (Apple Silicon)** | [ClipStash-macos-arm64.zip](../../releases/latest/download/ClipStash-macos-arm64.zip) |
+| **Windows** | Coming soon |
+
+> **macOS note:** The app is unsigned. On first launch, right-click and select "Open" to bypass Gatekeeper.
 
 ### Build from source
 
@@ -52,7 +59,7 @@ Coming soon — check [Releases](../../releases) for the latest builds.
 
 ```bash
 # Clone the repo
-git clone https://github.com/ItsMefish-MC/ClipStash.git
+git clone https://github.com/StuckInTheNet/ClipStash.git
 cd ClipStash
 
 # Install dependencies
