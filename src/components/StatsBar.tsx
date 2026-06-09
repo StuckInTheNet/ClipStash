@@ -26,7 +26,7 @@ export default function StatsBar({ stats, onClearAll }: StatsBarProps) {
 
       {stats.total_entries > 0 && (
         <button
-          onClick={onClearAll}
+          onClick={() => { if (window.confirm(`Delete all ${stats.total_entries} clips? This cannot be undone.`)) onClearAll(); }}
           className="text-[12px] text-text-muted hover:text-danger font-medium px-2.5 py-1 rounded-lg hover:bg-danger/5 transition-colors"
         >
           Clear all

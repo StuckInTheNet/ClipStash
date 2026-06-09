@@ -304,6 +304,37 @@ impl Database {
         Ok(is_fav)
     }
 
+    pub fn get_clip_image_path(&self, id: i64) -> Result<Option<String>, Box<dyn std::error::Error>> {
+        let conn = self.conn.lock().unwrap();
+        let path: Option<String> = conn.query_row(
+            "SELECT image_path FROM clips WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        ).ok();
+        Ok(path)
+    }
+
+    pub fn get_all_image_paths(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT image_path FROM clips WHERE image_path IS NOT NULL")?;
+        let paths = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        let mut result = Vec::new();
+        for p in paths {
+            result.push(p?);
+        }
+        Ok(result)
+    }
+
+    pub fn clip_exists_with_image(&self, path: &str) -> Result<bool, Box<dyn std::error::Error>> {
+        let conn = self.conn.lock().unwrap();
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM clips WHERE image_path = ?1",
+            params![path],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
     pub fn delete_clip(&self, id: i64) -> Result<(), Box<dyn std::error::Error>> {
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM clips WHERE id = ?1", params![id])?;

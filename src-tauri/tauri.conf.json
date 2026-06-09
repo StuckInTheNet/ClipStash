@@ -1,5 +1,4 @@
 {
-  "$schema": "https://raw.githubusercontent.com/nicehash/tauri/v2/packages/tauri-utils/schema.json",
   "productName": "ClipStash",
   "version": "0.1.0",
   "identifier": "com.clipstash.desktop",
@@ -27,7 +26,7 @@
       "iconAsTemplate": true
     },
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
     }
   },
   "bundle": {
@@ -39,7 +38,7 @@
       "icons/128x128@2x.png",
       "icons/256x256.png",
       "icons/512x512.png",
-      "icons/app-icon.png"
+      "icons/icon.png"
     ]
   }
 }

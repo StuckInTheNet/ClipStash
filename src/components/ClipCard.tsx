@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ClipEntry, Folder } from "../hooks/useClips";
 
@@ -40,6 +40,19 @@ export default function ClipCard({ clip, folders, onCopy, onToggleFavorite, onDe
   const [expanded, setExpanded] = useState(false);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [showFolderMenu, setShowFolderMenu] = useState(false);
+  const folderMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close folder menu on click outside
+  useEffect(() => {
+    if (!showFolderMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (folderMenuRef.current && !folderMenuRef.current.contains(e.target as Node)) {
+        setShowFolderMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showFolderMenu]);
 
   const config = TYPE_CONFIG[clip.content_type] || TYPE_CONFIG.text;
   const isLong = (clip.text_content?.length ?? 0) > 200;
@@ -164,7 +177,7 @@ export default function ClipCard({ clip, folders, onCopy, onToggleFavorite, onDe
               </svg>
             </button>
             {/* Move to folder */}
-            <div className="relative">
+            <div className="relative" ref={folderMenuRef}>
               <button
                 onClick={(e) => { e.stopPropagation(); setShowFolderMenu(!showFolderMenu); }}
                 className={`p-2 rounded-lg transition-colors ${

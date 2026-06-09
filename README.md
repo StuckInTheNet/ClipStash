@@ -117,7 +117,7 @@ ClipStash/
 
 ## Why Tauri?
 
-ClipStash uses Tauri instead of Electron for a reason: a clipboard manager runs 24/7 in the background. Tauri produces a ~5MB binary using ~30MB RAM, compared to Electron's ~150MB binary using ~150MB+ RAM. For a background utility, that difference matters.
+A clipboard manager lives in the background 24/7, so resource efficiency matters. Tauri ships a ~5MB binary that uses ~30MB of RAM. Electron, by comparison, produces a ~150MB binary and consumes 150MB+ of memory at idle. For a utility that's always running, lightweight wins.
 
 ## License
 

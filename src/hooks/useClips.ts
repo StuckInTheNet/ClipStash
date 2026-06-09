@@ -181,11 +181,16 @@ export function useClips() {
     pollRef.current = setInterval(() => {
       fetchClips();
       fetchStats();
+    }, 2000);
+
+    // Poll these less frequently
+    const slowPoll = setInterval(() => {
       fetchSourceApps();
       fetchFolders();
-    }, 1000);
+    }, 5000);
 
     return () => {
+      clearInterval(slowPoll);
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [fetchClips, fetchStats, fetchSourceApps, fetchFolders]);

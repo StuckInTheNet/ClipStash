@@ -14,7 +14,7 @@ function App() {
 
   useEffect(() => {
     applyTheme(getThemeById(themeId));
-  }, []);
+  }, [themeId]);
 
   const {
     clips, stats, sourceApps, folders,

@@ -41,12 +41,26 @@ fn toggle_favorite(state: State<AppState>, id: i64) -> Result<bool, String> {
 
 #[tauri::command]
 fn delete_clip(state: State<AppState>, id: i64) -> Result<(), String> {
-    state.db.delete_clip(id).map_err(|e| e.to_string())
+    // Get image path before deleting so we can clean up the file
+    let image_path = state.db.get_clip_image_path(id).ok().flatten();
+    state.db.delete_clip(id).map_err(|e| e.to_string())?;
+    // Clean up image file if it exists
+    if let Some(path) = image_path {
+        let _ = std::fs::remove_file(&path);
+    }
+    Ok(())
 }
 
 #[tauri::command]
 fn clear_all(state: State<AppState>) -> Result<(), String> {
-    state.db.clear_all().map_err(|e| e.to_string())
+    // Get all image paths before clearing
+    let image_paths = state.db.get_all_image_paths().unwrap_or_default();
+    state.db.clear_all().map_err(|e| e.to_string())?;
+    // Clean up image files
+    for path in image_paths {
+        let _ = std::fs::remove_file(&path);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -60,11 +74,36 @@ fn get_source_apps(state: State<AppState>) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-fn get_image_base64(path: String) -> Result<String, String> {
+fn get_image_base64(state: State<AppState>, path: String) -> Result<String, String> {
+    // Validate path is within ClipStash images directory
+    let images_dir = dirs::data_dir()
+        .ok_or("Could not find data directory")?
+        .join("ClipStash")
+        .join("images");
+    let canonical_path = std::fs::canonicalize(&path).map_err(|e| e.to_string())?;
+    let canonical_dir = std::fs::canonicalize(&images_dir).map_err(|e| e.to_string())?;
+    if !canonical_path.starts_with(&canonical_dir) {
+        return Err("Access denied: path outside images directory".to_string());
+    }
+
+    // Also verify this path belongs to a clip in the DB
+    let _clip_exists = state.db.clip_exists_with_image(&path)
+        .map_err(|e| e.to_string())?;
+
     use base64::Engine;
     let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+
+    // Detect MIME type from file header
+    let mime = if bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47]) {
+        "image/png"
+    } else if bytes.starts_with(&[0xFF, 0xD8]) {
+        "image/jpeg"
+    } else {
+        "image/png"
+    };
+
     let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-    Ok(format!("data:image/png;base64,{}", b64))
+    Ok(format!("data:{};base64,{}", mime, b64))
 }
 
 #[tauri::command]
@@ -85,11 +124,18 @@ fn copy_to_clipboard(text: String) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
+        // Pipe via stdin to avoid shell injection
         use std::process::Command;
-        Command::new("powershell")
-            .args(["-command", &format!("Set-Clipboard -Value '{}'", text.replace('\'', "''"))])
-            .output()
+        let mut child = Command::new("powershell")
+            .args(["-command", "Set-Clipboard -Value ($input | Out-String)"])
+            .stdin(std::process::Stdio::piped())
+            .spawn()
             .map_err(|e| e.to_string())?;
+        if let Some(stdin) = child.stdin.as_mut() {
+            use std::io::Write;
+            stdin.write_all(text.as_bytes()).map_err(|e| e.to_string())?;
+        }
+        child.wait().map_err(|e| e.to_string())?;
     }
 
     Ok(())
@@ -148,7 +194,6 @@ pub fn run() {
             delete_folder,
         ])
         .setup(|app| {
-            // Register global shortcut
             use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
             let shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyV);
             let app_handle = app.handle().clone();

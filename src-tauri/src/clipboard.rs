@@ -46,10 +46,11 @@ fn is_sensitive_content(text: &str) -> bool {
     sensitive_patterns.iter().any(|&pattern| lower.contains(pattern))
 }
 
-fn make_preview(text: &str, max_len: usize) -> String {
+fn make_preview(text: &str, max_chars: usize) -> String {
     let single_line = text.lines().next().unwrap_or("").trim();
-    if single_line.len() > max_len {
-        format!("{}...", &single_line[..max_len])
+    if single_line.chars().count() > max_chars {
+        let truncated: String = single_line.chars().take(max_chars).collect();
+        format!("{}...", truncated)
     } else {
         single_line.to_string()
     }
@@ -186,7 +187,7 @@ fn get_screenshot_dir() -> PathBuf {
         }
     }
     // Default: ~/Desktop
-    dirs::desktop_dir().unwrap_or_else(|| dirs::home_dir().unwrap().join("Desktop"))
+    dirs::desktop_dir().or_else(|| dirs::home_dir().map(|h| h.join("Desktop"))).unwrap_or_else(|| PathBuf::from("."))
 }
 
 /// Starts a thread that watches for new screenshot files on disk
