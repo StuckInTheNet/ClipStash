@@ -100,10 +100,7 @@ export default function Sidebar({
                 className={`w-5 h-5 rounded-full transition-all ${
                   newColor === color ? "scale-[1.3] ring-2 ring-offset-2 ring-offset-surface-raised" : "opacity-60 hover:opacity-100 hover:scale-110"
                 }`}
-                style={{
-                  backgroundColor: color,
-                  ringColor: newColor === color ? color : undefined,
-                }}
+                style={{ backgroundColor: color }}
               />
             ))}
           </div>

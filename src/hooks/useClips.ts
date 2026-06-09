@@ -45,7 +45,7 @@ export function useClips() {
   const [folderId, setFolderId] = useState<number | null>(null);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [loading, setLoading] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval>>();
+  const pollRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
   const fetchClips = useCallback(async () => {
     try {
